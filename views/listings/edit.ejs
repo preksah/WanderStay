@@ -1,0 +1,45 @@
+<% layout("/layouts/boilerplate") %>
+
+	<div class="row mt-3">
+		<div class="col-8 offset-2">
+			<h3>Edit a listing</h3>
+		<form method="post" action="/listings/<%= findList._id %>?_method=put">
+			
+			<div class="mb-3">
+				<label for="title" class="form-label">Title</label>
+				<input type="text" name="title" class="form-control" value=<%= findList.title %>> 
+			</div>
+
+			<div class="mb-3">
+				<label for="description" class="form-label">Description</label>
+				<textarea name="description" class="form-control"><%= findList.description %></textarea> 
+			</div>
+
+			<div class="mb-3">
+				<label for="image" class="form-label">Image</label>
+				<input type="text" name="image" class="form-control" value="<%= findList.image.url %>">
+			</div>
+
+			<div class="row">
+				<div class="mb-3 col-md-4">
+				<label for="price" class="form-label">Price</label>
+				<input type="text" name="price" class="form-control" value=<%= findList.price %>> 
+				</div>
+
+				<div class="mb-3 col-md-8">
+				<label for="country" class="form-label">Country</label>
+				<input type="text" name="country" class="form-control" value=<%= findList.country %>> 
+				</div>
+			</div>
+			
+
+			<div class="mb-3">
+				<label for="location" class="form-label">Location</label>
+				<input type="text" name="location" class="form-control" value=<%= findList.location %>> 
+			</div>
+
+			
+			<button class="btn btn-dark edit-btn mb-3">Edit</button>
+		</form>
+		</div>
+	</div>
