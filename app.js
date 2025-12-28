@@ -1,11 +1,58 @@
+// if(process.env.NODE_ENV!=="production"){
+// 	require("dotenv").config();
+// }
+if (process.env.NODE_ENV !== "production") {
+    console.log("Development mode");
+}
+require('dotenv').config();
+console.log(process.env.SECRET);
+
 const express=require("express");
 const app=express();
 const mongoose=require("mongoose");
 const path=require("path");
-const Listing =require("./Models/listing");
 const methodOverride=require("method-override");
 const ejsMate=require('ejs-mate');
+const wrapAsync=require("./utils/wrapAsync")
+const ExpressError=require("./utils/ExpressError.js");
+// const { error } = require("console");
+const session=require("express-session");
+const flash=require("connect-flash");
+// pass
+const passport=require("passport");
+const LocalStrategy=require("passport-local");
+const User=require("./Models/user.js");
 
+const dbURl=process.env.ATLASTDB_URL;
+console.log(dbURl);
+
+const MongoStore = require("connect-mongo");
+
+const store = MongoStore.create({
+  mongoUrl: dbURl,
+  collectionName: "sessions",
+});
+
+
+store.on("error",(err)=>{
+	console.log("Error in MONGO SESSION STORE",err)
+});
+const sessionOptions={
+	name: "wanderstay.sid",
+	store,
+	secret: process.env.SECRET,
+	resave: false,
+	saveUninitialized: false,
+	cookie:{
+		expire: Date.now()+7*24*60*60*1000 ,//one week
+		maxAge: 7*24*60*60*1000 ,
+	}
+};
+
+
+const listingsRouter=require("./routes/listing.js");
+const reviewsRouter = require("./routes/review.js");
+const userRouter=require("./routes/user.js");
 
 app.set("views",path.join(__dirname,"views"));
 app.use(express.urlencoded({extended:true}));
@@ -13,125 +60,81 @@ app.use(methodOverride("_method"));
 app.engine("ejs",ejsMate);
 app.set("view engine","ejs");
 
+// sessions
+app.use(session({
+  name: "wanderstay.sid",
+  store,
+  secret: process.env.SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  }
+}));
+
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+app.use(flash());
+
+
+passport.use(new LocalStrategy(User.authenticate()));
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+
+
+// middleware
+app.use((req,res,next)=>{
+	res.locals.success=req.flash("success");
+	res.locals.error=req.flash("error");
+	res.locals.currUser=req.user;
+	next();
+})
+
 // css
 app.use(express.static(path.join(__dirname, "/public")));
+
 
 // to call main fn
 main()
 	.then(()=>{
 	console.log("connected to db");
 	})
-	.catch(()=>{
+	.catch((err)=>{
 		console.log(err);
-	})
-// for creating db, we will write an async fn 
+	});
+// for creating db, we will write an async fn
+// const mongoDB="mongodb://127.0.0.1:27017/WanderStay"; 
+
 async function main() {
-	await mongoose.connect('mongodb://127.0.0.1:27017/WanderStay');
+	await mongoose.connect(dbURl);
 }
 
-app.get("/",(req,res)=>{
-	res.send("Hi, I m a root");
-});
-
-// Index Routing
-app.get("/listings", async (req, res) => {
-    const listings = await Listing.find({});
-    res.render("listings/index", { listings });  // pass the listings to the template
-});
-
-
-
-// create new
-app.get("/listings/new",(req,res)=>{
-	res.render("listings/new.ejs");
-});
-
-// after submitting the form
-app.post("/listings",(req,res)=>{
-	let {title,description,image,price,location,country}=req.body;
-
-	const imageUrl =
-    image === "" || !image
-      ? "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?q=80&w=1170&auto=format&fit=crop"
-      : image;
-	
-	const newList = new Listing({
-    title,
-    description,
-    image: {
-      url: imageUrl,
-      filename: "placeholder" // or leave empty if you're not using Cloudinary
-    },
-    price,
-    location,
-    country
-  });
-	newList.save()
-	.then(res=>{console.log("List was saved")})
-	.catch(err=>{console.log(err)})
-	res.redirect("/listings");
-})
-
-// for editing
-app.get("/listings/:id/edit",async(req,res)=>{
-	let {id}=req.params;
-	const findList=await Listing.findById(id);
-    console.log(findList); // 👈 Add this line
-	res.render("listings/edit.ejs",{findList});
-});
-
-// save the edit
-app.put("/listings/:id",async (req,res)=>{
-	let {id}=req.params;
-	 const imageUrl =
-    req.body.image === "" || !req.body.image
-      ? "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?q=80&w=1170&auto=format&fit=crop"
-      : req.body.image;
-
-	await Listing.findByIdAndUpdate(id, {
-  title: req.body.title,
-  description: req.body.description,
-	image: {
-		url: imageUrl
-	},
-	  price: req.body.price,
-  location: req.body.location,
-  country: req.body.country
-});
-	res.redirect(`/listings/${id}`);
-});
-
-// Delete
-app.delete("/listings/:id",async (req,res)=>{
-	let {id}=req.params;
-	let deleted= await Listing.findByIdAndDelete(id,{...req.body.Listing});
-	console.log(deleted);
-	res.redirect("/listings");
-
-});
-// show route
-app.get("/listings/:id", async(req,res)=>{
-	let {id}=req.params;
-
-	const read=await Listing.findById(id);
-	res.render("listings/show.ejs",{read});
-})
-
-// app.get("/testListing",async (req,res)=>{
-// 	let sampleListing=new Listing({
-// 		title:"New Villa",
-// 		description:"Near the beach",
-// 		price:3000,
-// 		location:"Goa",
-// 		country:"India",
-// 	});
-// 	await sampleListing.save();
-// 	console.log("Sample was saved");
-// 	res.send("Successful testing");
+// app.get("/",(req,res)=>{
+// 	res.send("Hi, I m a root");
 // });
 
+app.use("/listings",listingsRouter);
+app.use("/listings/:id/reviews",reviewsRouter);
+app.use("/",userRouter)
+
+app.all(/.*/, (req, res, next) => {
+    next(new ExpressError(404, "Page Not Found!"));
+});
+
+// error handling
+app.use((err,req,res,next)=>{
+	if (res.headersSent) {
+        return next(err); //prevents crash
+    }
+	let {statusCode=500,message="Something went wrong!"}=err;
+	res.status(statusCode).render("error.ejs",{message});
+	// res.status(statusCode).send(message);
+});
 
 app.listen(8080,()=>{
 	console.log("server is listening to post 8080");
 });
-
